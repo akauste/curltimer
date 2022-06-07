@@ -4,6 +4,7 @@ export type TimerData = {
   date: string;
   time: string;
   global_id: number;
+  boot_id: number;
   speed: number;
   data: { 
     boot_id: number; 
@@ -43,8 +44,8 @@ const TimerHistory = (props: {timerData: TimerData[]}) => {
           <td>{t.date}  {t.time}</td>
           <td>{t.global_id}</td>
           <td>
-            <a href={`/api/timer_set/${ t.data.boot_id }.html`}>{ t.data.boot_id }</a>
-				    <a href={`/api/timer_set/${ t.data.boot_id }.xlsx`}><i className="fa fa-file-excel-o" /></a>
+            <a href={`/api/timer_set/${ t.boot_id }.html`}>{ t.data.boot_id }</a>
+				    <a href={`/api/timer_set/${ t.boot_id }.xlsx`}><i className="fa fa-file-excel-o" /></a>
           </td>
           <td>{t.speed.toFixed(4)}</td>
           {showDebug && <>

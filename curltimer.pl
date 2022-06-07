@@ -40,10 +40,11 @@ post 'timer' => sub($self) {
 
 	$dbh->do(qq/
 		INSERT INTO measurement
-		(global_id, local_id, timestamp, speed, stone_number, stone_color, data)
-		VALUES (NULL, ?, ?, ?, ?, ?, ?)
+		(global_id, local_id, boot_id, timestamp, speed, stone_number, stone_color, data)
+		VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)
 	/, undef,
-		$data->{local_id}, 
+		$data->{local_id},
+    $data->{boot_id},
 		DateTime->now,
 		$data->{corrected_speed}, $data->{stone_number}, $data->{stone_color}, $json) or die $dbh->errstr;
 	my $gid = $dbh->last_insert_id(undef, undef, 'measurement', 'global_id');
@@ -52,7 +53,8 @@ post 'timer' => sub($self) {
     
   #Send message to all clients
   my $message =  JSON::XS->new->encode({
-    global_id => $gid, 
+    global_id => $gid,
+    boot_id => $data->{boot_id},
     speed => $data->{corrected_speed}, 
     data => $data, 
 		#DateTime->now,
@@ -89,8 +91,9 @@ websocket '/update' => sub ($self) {
   $clients->{$cid} {controller}->send($json->encode({
     global_id => -1,
     speed => 6.66,
+    boot_id => -1,
     data => {
-      boot_id => -1,
+      
     },
   }));
 
@@ -129,51 +132,17 @@ get 'timer_latest' => sub ($self) {
 	}
   $self->res->headers->header('Access-Control-Allow-Origin' => '*');
   return $self->render(json => \@list);
-
-	my $tt = <<'END_TT';
-	
-	this.update = function update() {
-		$http.get('/api/timer_after/'+ $this.maxgid)
-			.then(function(ret) {
-				for(var i=0; i <ret.data.length; i++) {
-					$this.times.unshift( ret.data[i] );
-					$this.maxgid = ret.data[i].global_id;
-					$this.lastspeed = ret.data[i].speed;
-				}
-			});
-	};
-	
-	$interval($this.update, 2000); // , [count], [invokeApply], [Pass]
-}]);
-
-function TimerListController($scope, timerdata, $element, $attrs) {
-  var ctrl = this;
-	ctrl.timer = timerdata;
-}
-angular.module('curltimer').component('timerlist', {
-  templateUrl: 'timerlist.html',
-	controller: ['$scope', 'timerdata', TimerListController],
-	bindings: {
-		//doc: '<'
-	}
-});
-
-})(window.angular);
-</script>
-
-END_TT
-
 };
 
 get 'timer_set/(:bootid).json' => sub ($self) {
 	my $boot = $self->captures->{'bootid.html'};
 	my $sth = $dbh->prepare(qq/
 		SELECT * FROM measurement
-		WHERE data LIKE '%boot_id":$boot,%'
+		WHERE boot_id=?
 		ORDER BY global_id ASC
 	/);
 	die "Boot id missing!" unless $boot && $boot =~ /^\d+$/;
-	$sth->execute();
+	$sth->execute($boot);
 
 	my @list;
 	#my @json;
@@ -186,98 +155,6 @@ get 'timer_set/(:bootid).json' => sub ($self) {
 		#push @json => JSON::XS->new->encode($href);
 	}
   return $self->render(json => \@list);
-
-	my $tt = <<'END_TT';
-<!DOCTYPE html>
-<html>
-<head>
-	<meta charset="utf-8">
-	<meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no, width=device-width">
-	<link href="//static.procus.fi/css/font-awesome/4.4.0/font-awesome.min.css" rel="stylesheet">
-	
-	<link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
-	<script src="https://static.procus.fi/js/angularjs/1.7.5/angular.min.js"></script>
-	<title>Timer</title>
-	
-	<script language="Javascript">
-(function(angular) {
-  'use strict';
-var curltimer = angular.module('curltimer', []);
-angular.module('curltimer').service('timerdata', ['$http', '$interval', function Timer($http, $interval) {
-	this.times  = [ [% json.join(',') %] ];
-	this.maxgid = [% maxgid %];
-	this.lastspeed = 0;
-	var $this = this;
-	/*
-	this.update = function update() {
-		$http.get('/api/timer_after/'+ $this.maxgid)
-			.then(function(ret) {
-				for(var i=0; i <ret.data.length; i++) {
-					$this.times.unshift( ret.data[i] );
-					$this.maxgid = ret.data[i].global_id;
-					$this.lastspeed = ret.data[i].speed;
-				}
-			});
-	};
-	
-	$interval($this.update, 2000); // , [count], [invokeApply], [Pass]
-	*/
-}]);
-
-function TimerListController($scope, timerdata, $element, $attrs) {
-  var ctrl = this;
-	ctrl.timer = timerdata;
-}
-angular.module('curltimer').component('bootlist', {
-  templateUrl: 'bootlist.html',
-	controller: ['$scope', 'timerdata', TimerListController],
-	bindings: {
-		//doc: '<'
-	}
-});
-
-})(window.angular);
-</script>
-
-<script type="text/ng-template" id="bootlist.html">
-<h1>Boot {{ $ctrl.timer.times[0].data.boot_id }} <a href="/api/timer_set/{{ $ctrl.timer.times[0].data.boot_id }}.xlsx" class="btn btn-success"><i class="fa fa-file-excel-o"></i> Excel</a></h1>
-<table class="table table-striped">
-	<thead>
-		<tr>
-			<th>GID</th>
-			<th>Speed m/s</th>
-			<th>Raw speed m/s</th>
-			<th>LDR min ... max</th>
-			<th>Shot start ... end = duration</th>
-		</tr>
-	</thead>
-	<tbody>
-		<tr ng-repeat="item in $ctrl.timer.times">
-			<td>{{ item.global_id }}</td>
-			<td><input type="number" static="true" class="form-control" ng-value="{{ item.speed | number:4 }}" /></td>
-			<td>{{ item.data.raw_speed }}</td>
-			<td>{{ item.data.ldr_min }} ... {{ item.data.ldr_max }}</td>
-			<td>{{ item.data.shot_start }} ... {{ item.data.shot_end }} = {{ item.data.shot_end - item.data.shot_start }}</td>
-		</tr>
-	</tbody>
-</table>
-</script>
-	
-</head>
-<body ng-app="curltimer">
-
-<bootlist></bootlist>
-
-</body>
-</html>
-END_TT
-
-	# $self->tt_process(\$tt, {
-	# 	#list => \@list, 
-	# 	json => \@json, 
-	# 	maxgid => $maxgid
-	# });
-  $self->render(json => {});
 };
 
 get 'timer_set/:bootid.xlsx' => sub ($self) {
@@ -287,10 +164,10 @@ get 'timer_set/:bootid.xlsx' => sub ($self) {
 
 	my $sth = $dbh->prepare(qq/
 		SELECT * FROM measurement
-		WHERE data LIKE '%boot_id":$boot,%'
+		WHERE boot_id=?
 		ORDER BY global_id ASC
 	/);
-	$sth->execute();
+	$sth->execute($boot);
 	
 	open my $fh, '>', \my $str or die "Failed to open filehandle: $!";
 	binmode $fh;

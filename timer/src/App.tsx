@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import './App.css';
 import {useState} from 'react';
 import useWebSocket, { ReadyState } from 'react-use-websocket';
@@ -8,6 +8,8 @@ import TimerDisplay from './components/TimerDisplay';
 
 function App() {
   const [timerData, setTimerData] = useState<TimerData[]>([]);
+  const didUnmount = useRef(false);
+
   const { /* sendMessage, */ lastJsonMessage, readyState } = useWebSocket('ws://localhost:8888/update',  {
     shouldReconnect: (closeEvent) => {
       /*
@@ -36,6 +38,12 @@ function App() {
       .then((data: TimerData[]) => {
         setTimerData(data);
       });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      didUnmount.current = true;
+    };
   }, []);
 
   if(timerData.length === 0) {

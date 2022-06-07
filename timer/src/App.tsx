@@ -8,7 +8,17 @@ import TimerDisplay from './components/TimerDisplay';
 
 function App() {
   const [timerData, setTimerData] = useState<TimerData[]>([]);
-  const { /* sendMessage, */ lastJsonMessage, readyState } = useWebSocket('ws://localhost:8888/update');
+  const { /* sendMessage, */ lastJsonMessage, readyState } = useWebSocket('ws://localhost:8888/update',  {
+    shouldReconnect: (closeEvent) => {
+      /*
+      useWebSocket will handle unmounting for you, but this is an example of a 
+      case in which you would not want it to automatically reconnect
+    */
+      return didUnmount.current === false;
+    },
+    reconnectAttempts: 10,
+    reconnectInterval: 3000,
+  });
 
   useEffect(() => {
     if (lastJsonMessage !== null) {

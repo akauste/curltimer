@@ -29,6 +29,22 @@ $dbh->do(<<"END_SQL");
 	data LONG TEXT)
 END_SQL
 
+sub get_latest($rows) {
+  my $sth = $dbh->prepare(qq/
+		SELECT * FROM measurement ORDER BY global_id DESC LIMIT $rows
+	/);
+	$sth->execute;
+	
+  my @list;
+	my $maxgid;
+	while(my $href = $sth->fetchrow_hashref) {
+		$href->{data} = JSON::XS->new->decode($href->{data});
+		$maxgid = $href->{global_id} if $maxgid < $href->{global_id};
+		($href->{date}, $href->{time}) = split /T/, $href->{timestamp};
+		push @list, $href;
+	}
+  return \@list;
+}
 
 get '/' => sub ($self) {
   $self->redirect_to('index.html');
@@ -52,16 +68,18 @@ post 'timer' => sub($self) {
 	
     
   #Send message to all clients
-  my $message =  JSON::XS->new->encode({
-    global_id => $gid,
-    boot_id => $data->{boot_id},
-    speed => $data->{corrected_speed}, 
-    data => $data, 
-		#DateTime->now,
-		#$data->{corrected_speed}, $data->{stone_number}, $data->{stone_color}, $json
-  });
-  foreach my $cid (keys%$clients) {
-    $clients->{$cid} {controller}->send($message);
+  # my $message =  JSON::XS->new->encode({
+  #   global_id => $gid,
+  #   boot_id => $data->{boot_id},
+  #   speed => $data->{corrected_speed}, 
+  #   data => $data, 
+	# 	#DateTime->now,
+	# 	#$data->{corrected_speed}, $data->{stone_number}, $data->{stone_color}, $json
+  # });
+  my $list = get_latest(1);
+  my $json_out = JSON::XS->new->encode($list->[0]);
+  foreach my $cid (keys %$clients) {
+    $clients->{$cid}{controller}->send($json_out);
   }
 
   $self->res->headers->header('Access-Control-Allow-Origin' => '*');
@@ -88,50 +106,20 @@ websocket '/update' => sub ($self) {
   #Resistance controller
   $clients->{$cid} {controller} = $self;
 
-  $clients->{$cid} {controller}->send($json->encode({
-    global_id => -1,
-    speed => 6.66,
-    boot_id => -1,
-    data => {
-      
-    },
-  }));
-
-  
-  # #Receive message
-  # $self->on('message' => sub {
-  #   my ($self, $message) = @_;
-    
-  #   #Send message to all clients
-  #   foreach my $cid (keys%$clients) {
-  #     $clients->{$cid} {controller}->send($message);
-  #   }
-  # });
+  my $list = get_latest(1);
+  $clients->{$cid} {controller}->send(JSON::XS->new->encode($list->[0]));
   
   # Finish
   $self->on('finish' => sub {
-      
     # Remove client
     delete $clients->{$cid};
   });
 };
 
 get 'timer_latest' => sub ($self) {
-	my $sth = $dbh->prepare(qq/
-		SELECT * FROM measurement ORDER BY global_id DESC LIMIT 200
-	/);
-	$sth->execute;
-	
-  my @list;
-	my $maxgid;
-	while(my $href = $sth->fetchrow_hashref) {
-		$href->{data} = JSON::XS->new->decode($href->{data});
-		$maxgid = $href->{global_id} if $maxgid < $href->{global_id};
-		($href->{date}, $href->{time}) = split /T/, $href->{timestamp};
-		push @list, $href;
-	}
+	my $list = get_latest(200);
   $self->res->headers->header('Access-Control-Allow-Origin' => '*');
-  return $self->render(json => \@list);
+  return $self->render(json => $list);
 };
 
 get 'timer_set/(:bootid).json' => sub ($self) {

@@ -19,17 +19,17 @@ function App() {
       return didUnmount.current === false;
     },
     reconnectAttempts: 10,
-    reconnectInterval: 3000,
+    reconnectInterval: 1000,
   });
 
   useEffect(() => {
-    if (lastJsonMessage !== null) {
+    if (lastJsonMessage !== null && lastJsonMessage.speed && (!timerData || lastJsonMessage.global_id !== timerData[0].global_id)) {
       setTimerData(prev => [lastJsonMessage, ...prev]);
     }
-  }, [lastJsonMessage, setTimerData]);
+  }, [lastJsonMessage, setTimerData, timerData]);
 
   useEffect(() => {
-    fetch('/timer_latest')
+    fetch('http://localhost:8888/timer_latest')
       .then(res => {
         if(res.ok) {
           return res.json();

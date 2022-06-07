@@ -64,7 +64,7 @@ post 'timer' => sub($self) {
     $clients->{$cid} {controller}->send($message);
   }
 
-  $self->headers->header('Access-Control-Allow-Origin' => '*');
+  $self->res->headers->header('Access-Control-Allow-Origin' => '*');
 	return $self->render(json => {local_id => $lid, global_id => $gid});
 };
 

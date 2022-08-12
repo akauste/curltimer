@@ -52,18 +52,9 @@ get '/' => sub ($self) {
 
 post 'timer' => sub($self) {
 	my $json = $self->param('JSON');
-	my $data = JSON::XS->new->decode( $json );
 
-	$dbh->do(qq/
-		INSERT INTO measurement
-		(global_id, local_id, boot_id, timestamp, speed, stone_number, stone_color, data)
-		VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)
-	/, undef,
-		$data->{local_id},
-    $data->{boot_id},
-		DateTime->now,
-		$data->{corrected_speed}, $data->{stone_number}, $data->{stone_color}, $json) or die $dbh->errstr;
-	my $gid = $dbh->last_insert_id(undef, undef, 'measurement', 'global_id');
+	my $data = save2db($json);
+	my $gid = $data->{global_id};
 	my $lid = $data->{local_id} || 0;
 	
     
@@ -85,6 +76,23 @@ post 'timer' => sub($self) {
   $self->res->headers->header('Access-Control-Allow-Origin' => '*');
 	return $self->render(json => {local_id => $lid, global_id => $gid});
 };
+
+sub save2db ($json) {
+	my $data = JSON::XS->new->decode( $json );
+	$dbh->do(qq/
+		INSERT INTO measurement
+		(global_id, local_id, boot_id, timestamp, speed, stone_number, stone_color, data)
+		VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)
+	/, undef,
+		$data->{local_id},
+    $data->{boot_id},
+		DateTime->now,
+		$data->{corrected_speed}, $data->{stone_number}, $data->{stone_color}, $json) or die $dbh->errstr;
+	
+	my $global_id = $dbh->last_insert_id(undef, undef, 'measurement', 'global_id');
+	$data->{global_id} = $global_id;
+	return $data;
+}
 
 get 'timer_after/:gid' => sub ($self) {
 	my $gid = $self->captures->{gid};
